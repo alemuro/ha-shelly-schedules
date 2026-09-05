@@ -4,6 +4,15 @@
  */
 
 const DAY_LABELS = ["Dg", "Dl", "Dt", "Dc", "Dj", "Dv", "Ds"]; // 0=Sun, 1=Mon...
+const DAY_NAMES = [
+  "Diumenge",
+  "Dilluns",
+  "Dimarts",
+  "Dimecres",
+  "Dijous",
+  "Divendres",
+  "Dissabte",
+];
 
 class ShellySchedulesPanel extends HTMLElement {
   constructor() {
@@ -12,9 +21,28 @@ class ShellySchedulesPanel extends HTMLElement {
     this._hass = null;
     this._devices = {};
     this._selectedDevice = "all";
+    this._selectedDay = new Date().getDay();
     this._loading = false;
     this._editingSchedule = null;
     this._showModal = false;
+    this._timer = null;
+  }
+
+  connectedCallback() {
+    if (!this._timer) {
+      this._timer = setInterval(() => {
+        if (this._selectedDay === new Date().getDay()) {
+          this._render();
+        }
+      }, 30000);
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
   }
 
   set hass(hass) {
@@ -169,6 +197,278 @@ class ShellySchedulesPanel extends HTMLElement {
     } catch (err) {
       alert("Error desant l'horari: " + (err.message || err));
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // Timeline Calculations
+  // --------------------------------------------------------------------------
+
+  _getSunTimes() {
+    let sunriseMin = 7 * 60; // 07:00 default
+    let sunsetMin = 20 * 60; // 20:00 default
+    if (this._hass && this._hass.states && this._hass.states["sun.sun"]) {
+      const sun = this._hass.states["sun.sun"];
+      if (sun.attributes) {
+        if (sun.attributes.next_rising) {
+          const d = new Date(sun.attributes.next_rising);
+          if (!isNaN(d.getTime())) {
+            sunriseMin = d.getHours() * 60 + d.getMinutes();
+          }
+        }
+        if (sun.attributes.next_setting) {
+          const d = new Date(sun.attributes.next_setting);
+          if (!isNaN(d.getTime())) {
+            sunsetMin = d.getHours() * 60 + d.getMinutes();
+          }
+        }
+      }
+    }
+    return { sunriseMin, sunsetMin };
+  }
+
+  _parseTimeToMinutes(timeStr, timeType, sunTimes) {
+    if (!timeStr) return 0;
+    const str = String(timeStr).trim().toLowerCase();
+
+    if (timeType === "sunrise" || str.includes("sunrise")) {
+      let base = sunTimes.sunriseMin;
+      const match = str.match(/([+-])\s*(\d+)\s*(m|h|min)?/);
+      if (match) {
+        const sign = match[1] === "-" ? -1 : 1;
+        let val = parseInt(match[2], 10) || 0;
+        if (match[3] === "h") val *= 60;
+        base += sign * val;
+      }
+      return Math.max(0, Math.min(1440, base));
+    }
+
+    if (timeType === "sunset" || str.includes("sunset")) {
+      let base = sunTimes.sunsetMin;
+      const match = str.match(/([+-])\s*(\d+)\s*(m|h|min)?/);
+      if (match) {
+        const sign = match[1] === "-" ? -1 : 1;
+        let val = parseInt(match[2], 10) || 0;
+        if (match[3] === "h") val *= 60;
+        base += sign * val;
+      }
+      return Math.max(0, Math.min(1440, base));
+    }
+
+    const parts = str.split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      return Math.max(0, Math.min(1440, h * 60 + m));
+    }
+    if (str.length === 4 && /^\d+$/.test(str)) {
+      const h = parseInt(str.substring(0, 2), 10) || 0;
+      const m = parseInt(str.substring(2), 10) || 0;
+      return Math.max(0, Math.min(1440, h * 60 + m));
+    }
+    return 0;
+  }
+
+  _formatMinutes(m) {
+    if (m >= 1440) return "24:00";
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  }
+
+  _formatDuration(dur) {
+    const h = Math.floor(dur / 60);
+    const m = dur % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  }
+
+  _computeTimelineForChannel(schedules, channel, targetDay) {
+    const sunTimes = this._getSunTimes();
+    const chanSchedules = (schedules || []).filter(
+      (s) => (s.channel || 0) === channel && s.enabled !== false
+    );
+
+    if (chanSchedules.length === 0) {
+      return {
+        intervals: [{ start: 0, end: 1440, state: false, durStr: "24h", startStr: "00:00", endStr: "24:00" }],
+        totalOnMinutes: 0,
+        totalOnStr: "0m",
+        percentOn: 0,
+      };
+    }
+
+    // Build all events across the whole week [day: 0..6, minutes: 0..1440, action: 'on'|'off'|'toggle']
+    const weeklyEvents = [];
+    chanSchedules.forEach((s) => {
+      const min = this._parseTimeToMinutes(s.time_str, s.time_type, sunTimes);
+      const days = s.days && s.days.length ? s.days : [0, 1, 2, 3, 4, 5, 6];
+      days.forEach((d) => {
+        weeklyEvents.push({
+          day: d,
+          minutes: min,
+          action: s.action || "on",
+          timeIndex: d * 1440 + min,
+        });
+      });
+    });
+
+    weeklyEvents.sort((a, b) => a.timeIndex - b.timeIndex);
+
+    // Determine state entering targetDay at 00:00 (look back chronologically across the week)
+    let lastEventBefore = null;
+    const targetStartIdx = targetDay * 1440;
+    for (let i = weeklyEvents.length - 1; i >= 0; i--) {
+      if (weeklyEvents[i].timeIndex < targetStartIdx) {
+        lastEventBefore = weeklyEvents[i];
+        break;
+      }
+    }
+    // If none before in current week, wrap around to the latest event of the week
+    if (!lastEventBefore && weeklyEvents.length > 0) {
+      lastEventBefore = weeklyEvents[weeklyEvents.length - 1];
+    }
+
+    let currentState = lastEventBefore ? lastEventBefore.action === "on" : false;
+
+    // Events happening on targetDay
+    const dayEvents = weeklyEvents
+      .filter((e) => e.day === targetDay)
+      .sort((a, b) => a.minutes - b.minutes);
+
+    const intervals = [];
+    let prevMinute = 0;
+
+    dayEvents.forEach((ev) => {
+      let nextState;
+      if (ev.action === "on") nextState = true;
+      else if (ev.action === "off") nextState = false;
+      else nextState = !currentState;
+
+      if (ev.minutes > prevMinute) {
+        intervals.push({
+          start: prevMinute,
+          end: ev.minutes,
+          state: currentState,
+          durStr: this._formatDuration(ev.minutes - prevMinute),
+          startStr: this._formatMinutes(prevMinute),
+          endStr: this._formatMinutes(ev.minutes),
+        });
+        prevMinute = ev.minutes;
+      }
+      currentState = nextState;
+    });
+
+    if (prevMinute < 1440) {
+      intervals.push({
+        start: prevMinute,
+        end: 1440,
+        state: currentState,
+        durStr: this._formatDuration(1440 - prevMinute),
+        startStr: this._formatMinutes(prevMinute),
+        endStr: "24:00",
+      });
+    }
+
+    // Merge consecutive intervals having identical state
+    const merged = [];
+    intervals.forEach((cur) => {
+      if (cur.end === cur.start) return;
+      if (merged.length > 0 && merged[merged.length - 1].state === cur.state) {
+        const last = merged[merged.length - 1];
+        last.end = cur.end;
+        last.endStr = cur.endStr;
+        last.durStr = this._formatDuration(last.end - last.start);
+      } else {
+        merged.push({ ...cur });
+      }
+    });
+
+    let totalOnMinutes = 0;
+    merged.forEach((item) => {
+      if (item.state) {
+        totalOnMinutes += item.end - item.start;
+      }
+    });
+
+    const percentOn = Math.round((totalOnMinutes / 1440) * 100);
+
+    return {
+      intervals: merged,
+      totalOnMinutes,
+      totalOnStr: this._formatDuration(totalOnMinutes),
+      percentOn,
+    };
+  }
+
+  _renderTimeline(devKey, dev, channel, tl, isToday, nowMinutes, nowStr, totalChannels) {
+    const isSingleChan = totalChannels <= 1;
+
+    return `
+      <div class="timeline-box">
+        <div class="timeline-header">
+          <div class="timeline-label">
+            <ha-icon icon="mdi:chart-timeline-variant"></ha-icon>
+            <span>${isSingleChan ? "Previsió 24h" : `Previsió 24h · Canal ${channel}`}</span>
+          </div>
+          <div class="timeline-stat ${tl.totalOnMinutes > 0 ? "active" : ""}">
+            <ha-icon icon="${tl.totalOnMinutes > 0 ? "mdi:power" : "mdi:power-off"}"></ha-icon>
+            <span>${tl.totalOnMinutes > 0 ? `${tl.totalOnStr} encès (${tl.percentOn}%)` : "Tot el dia apagat"}</span>
+          </div>
+        </div>
+
+        <div class="timeline-track-outer">
+          <div class="timeline-track">
+            <div class="timeline-track-inner">
+              ${tl.intervals
+                .map((int) => {
+                  const leftPct = ((int.start / 1440) * 100).toFixed(2);
+                  const widthPct = (((int.end - int.start) / 1440) * 100).toFixed(2);
+                  const labelVisible = (int.end - int.start) >= 45; // show duration label if >= 45m
+
+                  if (int.state) {
+                    return `
+                      <div class="timeline-segment on"
+                           style="left: ${leftPct}%; width: ${widthPct}%;"
+                           title="${int.startStr} - ${int.endStr} (${int.durStr}) · ENCÈS">
+                        ${labelVisible ? `<span class="segment-label">${int.durStr}</span>` : ""}
+                      </div>
+                    `;
+                  }
+                  return `
+                    <div class="timeline-segment off"
+                         style="left: ${leftPct}%; width: ${widthPct}%;"
+                         title="${int.startStr} - ${int.endStr} (${int.durStr}) · APAGAT">
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>
+
+            ${
+              isToday
+                ? `
+              <div class="timeline-now-cursor" style="left: ${((nowMinutes / 1440) * 100).toFixed(2)}%;" title="Hora actual: ${nowStr}">
+                <div class="cursor-line"></div>
+                <div class="cursor-badge">Ara ${nowStr}</div>
+              </div>
+            `
+                : ""
+            }
+          </div>
+
+          <div class="timeline-axis">
+            <span>00:00</span>
+            <span>04:00</span>
+            <span>08:00</span>
+            <span>12:00</span>
+            <span>16:00</span>
+            <span>20:00</span>
+            <span>24:00</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   _render() {
