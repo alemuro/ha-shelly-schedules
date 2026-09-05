@@ -486,10 +486,32 @@ class ShellyDeviceClient:
     ) -> Any:
         """Enable or disable a schedule without changing its settings."""
         if self.generation == SHELLY_GEN_2:
+            try:
+                jobs_res = await self._async_rpc_call("Schedule.List")
+                if jobs_res and "jobs" in jobs_res:
+                    for job in jobs_res["jobs"]:
+                        if str(job.get("id")) == str(schedule_id):
+                            params = {
+                                "id": int(schedule_id),
+                                "enable": enabled,
+                                "timespec": job.get("timespec"),
+                                "calls": job.get("calls", []),
+                            }
+                            return await self._async_rpc_call("Schedule.Update", params)
+            except Exception as err:
+                _LOGGER.debug(
+                    "Failed to fetch job details before toggle, using direct update: %s", err
+                )
+
             return await self._async_rpc_call(
                 "Schedule.Update", {"id": int(schedule_id), "enable": enabled}
             )
 
-        # For Gen 1, toggling is at the relay schedule master level
-        payload = {"schedule": "true" if enabled else "false"}
+        # Gen 1: update master schedule toggle while preserving existing rules
+        settings = await self._async_gen1_get_relay_settings(channel)
+        rules = settings.get("schedule_rules", []) if settings else []
+        payload = {
+            "schedule": "true" if enabled else "false",
+            "schedule_rules": ",".join(rules) if isinstance(rules, list) else str(rules),
+        }
         return await self._async_gen1_post_relay_settings(channel, payload)

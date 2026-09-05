@@ -133,3 +133,70 @@ async def test_gen2_create_schedule():
         assert params["timespec"] == "0 15 7 * * MON,TUE,WED,THU,FRI"
         assert params["calls"][0]["method"] == "Switch.Set"
         assert params["calls"][0]["params"] == {"id": 0, "on": True}
+
+
+@pytest.mark.asyncio
+async def test_gen2_toggle_schedule():
+    """Test toggling a schedule preserves job parameters in Gen 2."""
+    session = MagicMock()
+    client = ShellyDeviceClient(session=session, host="192.168.1.50")
+    client.generation = SHELLY_GEN_2
+
+    jobs_response = {
+        "jobs": [
+            {
+                "id": 5,
+                "enable": True,
+                "timespec": "0 0 9 * * SUN",
+                "calls": [{"method": "Switch.Set", "params": {"id": 0, "on": True}}],
+            }
+        ]
+    }
+
+    async def rpc_mock(method, params=None):
+        if method == "Schedule.List":
+            return jobs_response
+        if method == "Schedule.Update":
+            return {"rev": 2}
+        return {}
+
+    with patch.object(client, "_async_rpc_call", side_effect=rpc_mock) as mock_rpc:
+        result = await client.async_toggle_schedule(schedule_id=5, enabled=False, channel=0)
+        assert result == {"rev": 2}
+        # Verify Schedule.Update was called with preserved timespec and calls
+        update_calls = [c for c in mock_rpc.call_args_list if c[0][0] == "Schedule.Update"]
+        assert len(update_calls) == 1
+        update_params = update_calls[0][0][1]
+        assert update_params["id"] == 5
+        assert update_params["enable"] is False
+        assert update_params["timespec"] == "0 0 9 * * SUN"
+        assert update_params["calls"] == jobs_response["jobs"][0]["calls"]
+
+
+@pytest.mark.asyncio
+async def test_gen1_toggle_schedule():
+    """Test toggling a schedule in Gen 1 preserves rules and updates master flag."""
+    session = MagicMock()
+    client = ShellyDeviceClient(session=session, host="192.168.1.60")
+    client.generation = SHELLY_GEN_1
+
+    current_settings = {
+        "schedule": True,
+        "schedule_rules": ["0800-0123456-on"],
+    }
+
+    post_mock = AsyncMock(return_value={"schedule": False})
+    with (
+        patch.object(
+            client, "_async_gen1_get_relay_settings", new=AsyncMock(return_value=current_settings)
+        ),
+        patch.object(client, "_async_gen1_post_relay_settings", new=post_mock),
+    ):
+        await client.async_toggle_schedule(schedule_id="0_0", enabled=False, channel=0)
+        post_mock.assert_called_once_with(
+            0,
+            {
+                "schedule": "false",
+                "schedule_rules": "0800-0123456-on",
+            },
+        )

@@ -45,19 +45,45 @@ class ShellySchedulesPanel extends HTMLElement {
     }
   }
 
-  async _toggleSchedule(device, scheduleId, currentStatus, channel) {
+  async _toggleSchedule(device, scheduleId, targetEnabled, channel) {
     if (!this._hass) return;
+
+    // Optimistic local state update for instant visual feedback
+    const devData = this._devices[device];
+    let originalEnabled = !targetEnabled;
+    if (devData && devData.schedules) {
+      const s = devData.schedules.find((item) => String(item.id) === String(scheduleId));
+      if (s) {
+        originalEnabled = s.enabled;
+        s.enabled = targetEnabled;
+        this._render();
+      }
+    }
+
     try {
-      await this._hass.connection.sendMessagePromise({
+      const resp = await this._hass.connection.sendMessagePromise({
         type: "shelly_schedules/toggle",
         device: device,
         schedule_id: scheduleId,
-        enabled: !currentStatus,
-        channel: channel || 0,
+        enabled: targetEnabled,
+        channel: parseInt(channel, 10) || 0,
       });
-      await this._fetchSchedules();
+      if (resp && resp.devices) {
+        this._devices = resp.devices;
+        this._render();
+      } else {
+        await this._fetchSchedules();
+      }
     } catch (err) {
-      alert("Error canviant estat: " + (err.message || err));
+      // Revert optimistic update on error
+      if (devData && devData.schedules) {
+        const s = devData.schedules.find((item) => String(item.id) === String(scheduleId));
+        if (s) {
+          s.enabled = originalEnabled;
+          this._render();
+        }
+      }
+      alert("Error canviant l'estat de l'horari: " + (err.message || err));
     }
   }
 
@@ -321,11 +347,63 @@ class ShellySchedulesPanel extends HTMLElement {
           padding-top: 10px;
           margin-top: 4px;
         }
+        .card.card-disabled {
+          opacity: 0.72;
+          background: var(--card-background-color, #f8f9fa);
+          border: 1px dashed var(--divider-color, #e0e0e0);
+        }
+        .card.card-disabled .action-tag {
+          filter: grayscale(0.5);
+        }
         .switch-container {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
+        }
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 40px;
+          height: 22px;
+        }
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: var(--switch-unchecked-button-color, #ccc);
+          transition: 0.25s;
+          border-radius: 22px;
+        }
+        .slider:before {
+          position: absolute;
+          content: "";
+          height: 16px;
+          width: 16px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: 0.25s;
+          border-radius: 50%;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input:checked + .slider {
+          background-color: var(--primary-color, #03a9f4);
+        }
+        input:checked + .slider:before {
+          transform: translateX(18px);
+        }
+        .switch-static-label {
           font-size: 13px;
+          font-weight: 500;
+          color: var(--primary-text-color, #333);
         }
         .btn-group {
           display: flex;
@@ -447,7 +525,7 @@ class ShellySchedulesPanel extends HTMLElement {
         ` : `
           <div class="grid">
             ${filteredSchedules.map((s) => `
-              <div class="card">
+              <div class="card ${s.enabled ? '' : 'card-disabled'}">
                 <div class="card-header">
                   <div>
                     <div class="device-badge">${s.devName} (Relay ${s.channel || 0})</div>
@@ -472,8 +550,11 @@ class ShellySchedulesPanel extends HTMLElement {
 
                 <div class="card-footer">
                   <div class="switch-container">
-                    <input type="checkbox" ${s.enabled ? 'checked' : ''} class="toggle-cb" data-dev="${s.deviceKey}" data-id="${s.id}" data-chan="${s.channel || 0}">
-                    <span>${s.enabled ? 'Actiu' : 'Desactivat'}</span>
+                    <label class="switch" title="Activar o desactivar horari">
+                      <input type="checkbox" ${s.enabled ? 'checked' : ''} class="toggle-cb" data-dev="${s.deviceKey}" data-id="${s.id}" data-chan="${s.channel || 0}">
+                      <span class="slider"></span>
+                    </label>
+                    <span class="switch-static-label">Actiu</span>
                   </div>
                   <div class="btn-group">
                     <button class="btn-outline btn-edit" data-dev="${s.deviceKey}" data-id="${s.id}">✏️</button>
@@ -575,11 +656,12 @@ class ShellySchedulesPanel extends HTMLElement {
 
     // Toggle switches
     root.querySelectorAll(".toggle-cb").forEach((cb) => {
-      cb.onchange = () => {
+      cb.onchange = (e) => {
+        e.stopPropagation();
         const dev = cb.getAttribute("data-dev");
         const id = cb.getAttribute("data-id");
         const chan = cb.getAttribute("data-chan");
-        this._toggleSchedule(dev, id, !cb.checked, chan);
+        this._toggleSchedule(dev, id, cb.checked, chan);
       };
     });
 

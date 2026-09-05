@@ -174,8 +174,22 @@ def async_register_websocket_api(
             result = await client.async_toggle_schedule(
                 schedule_id=msg["schedule_id"], enabled=msg["enabled"], channel=msg["channel"]
             )
-            await coordinator.async_request_refresh()
-            connection.send_result(msg["id"], {"success": True, "result": result})
+            # Optimistically update in-memory coordinator cache
+            dev_data = coordinator.data.get(device) if coordinator.data else None
+            if not dev_data and coordinator.data:
+                for v in coordinator.data.values():
+                    if v.get("host") == device or v.get("name") == device:
+                        dev_data = v
+                        break
+            if dev_data and "schedules" in dev_data:
+                for s in dev_data["schedules"]:
+                    if str(s.get("id")) == str(msg["schedule_id"]):
+                        s["enabled"] = msg["enabled"]
+
+            await coordinator.async_refresh()
+            connection.send_result(
+                msg["id"], {"success": True, "result": result, "devices": coordinator.data}
+            )
         except Exception as err:
             connection.send_error(msg["id"], "toggle_failed", str(err))
 
