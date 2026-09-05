@@ -312,4 +312,3 @@ async def test_gen2_all_days_create_and_parse():
         assert scheds[0].days == [0, 1, 2, 3, 4, 5, 6]
         assert scheds[1].days == [0, 1, 2, 3, 4, 5, 6]
         assert scheds[2].days == [0, 1, 2, 3, 4, 5, 6]
-

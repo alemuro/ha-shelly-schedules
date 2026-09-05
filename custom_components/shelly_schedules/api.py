@@ -18,13 +18,28 @@ DAY_NAMES_GEN2 = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 DAY_MAP_GEN2_TO_INT = {name: i for i, name in enumerate(DAY_NAMES_GEN2)}
 
 DAY_NAME_MAP = {
-    "SUN": 0, "SU": 0, "0": 0, "7": 0,
-    "MON": 1, "MO": 1, "1": 1,
-    "TUE": 2, "TU": 2, "2": 2,
-    "WED": 3, "WE": 3, "3": 3,
-    "THU": 4, "TH": 4, "4": 4,
-    "FRI": 5, "FR": 5, "5": 5,
-    "SAT": 6, "SA": 6, "6": 6,
+    "SUN": 0,
+    "SU": 0,
+    "0": 0,
+    "7": 0,
+    "MON": 1,
+    "MO": 1,
+    "1": 1,
+    "TUE": 2,
+    "TU": 2,
+    "2": 2,
+    "WED": 3,
+    "WE": 3,
+    "3": 3,
+    "THU": 4,
+    "TH": 4,
+    "4": 4,
+    "FRI": 5,
+    "FR": 5,
+    "5": 5,
+    "SAT": 6,
+    "SA": 6,
+    "6": 6,
 }
 
 
