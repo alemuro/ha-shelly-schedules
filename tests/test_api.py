@@ -231,5 +231,85 @@ async def test_shelly_pro_lowercase_method_parsing():
         assert len(schedules) == 2
         assert schedules[0].action == "on"
         assert schedules[0].time_str == "16:00"
+        assert schedules[0].days == [0, 1, 2, 3, 4, 5, 6]
         assert schedules[1].action == "off"
         assert schedules[1].time_str == "19:00"
+        assert schedules[1].days == [0, 1, 2, 3, 4, 5, 6]
+
+
+def test_parse_cron_dow():
+    """Test parse_cron_dow helper handles all cron representations."""
+    from custom_components.shelly_schedules.api import parse_cron_dow
+
+    # Wildcards and empty
+    assert parse_cron_dow("*") == [0, 1, 2, 3, 4, 5, 6]
+    assert parse_cron_dow("") == [0, 1, 2, 3, 4, 5, 6]
+
+    # Explicit day names
+    assert parse_cron_dow("SUN,MON,TUE,WED,THU,FRI,SAT") == [0, 1, 2, 3, 4, 5, 6]
+    assert parse_cron_dow("MON,WED,FRI") == [1, 3, 5]
+
+    # Ranges
+    assert parse_cron_dow("0-6") == [0, 1, 2, 3, 4, 5, 6]
+    assert parse_cron_dow("SUN-SAT") == [0, 1, 2, 3, 4, 5, 6]
+    assert parse_cron_dow("MON-FRI") == [1, 2, 3, 4, 5]
+    assert parse_cron_dow("1-5") == [1, 2, 3, 4, 5]
+
+    # Numeric with 7 as Sunday
+    assert parse_cron_dow("7") == [0]
+    assert parse_cron_dow("0,1,2,3,4,5,6") == [0, 1, 2, 3, 4, 5, 6]
+
+
+@pytest.mark.asyncio
+async def test_gen2_all_days_create_and_parse():
+    """Test that all days creates explicit day names and parses them correctly."""
+    session = MagicMock()
+    client = ShellyDeviceClient(session=session, host="192.168.1.50")
+    client.generation = SHELLY_GEN_2
+
+    rpc_mock = AsyncMock(return_value={"id": 10, "rev": 1})
+    with patch.object(client, "_async_rpc_call", new=rpc_mock):
+        # Create schedule with all 7 days
+        await client.async_create_schedule(
+            time_str="08:00",
+            action="on",
+            days=[0, 1, 2, 3, 4, 5, 6],
+            channel=0,
+            time_type="time",
+            enabled=True,
+        )
+        rpc_mock.assert_called_once()
+        params = rpc_mock.call_args[0][1]
+        # Must send explicit day names so Shelly UI shows all days checked!
+        assert params["timespec"] == "0 0 8 * * SUN,MON,TUE,WED,THU,FRI,SAT"
+
+    # Now verify reading back schedules with various all-days formats
+    jobs_sample = {
+        "jobs": [
+            {
+                "id": 11,
+                "enable": True,
+                "timespec": "0 0 8 * * *",  # Asterisk format
+                "calls": [{"method": "Switch.Set", "params": {"id": 0, "on": True}}],
+            },
+            {
+                "id": 12,
+                "enable": True,
+                "timespec": "0 0 9 * * 0-6",  # Range format
+                "calls": [{"method": "Switch.Set", "params": {"id": 0, "on": False}}],
+            },
+            {
+                "id": 13,
+                "enable": True,
+                "timespec": "@sunrise * * SUN,MON,TUE,WED,THU,FRI,SAT",  # Sunrise with days
+                "calls": [{"method": "Switch.Set", "params": {"id": 0, "on": True}}],
+            },
+        ]
+    }
+    with patch.object(client, "_async_rpc_call", new=AsyncMock(return_value=jobs_sample)):
+        scheds = await client.async_get_schedules()
+        assert len(scheds) == 3
+        assert scheds[0].days == [0, 1, 2, 3, 4, 5, 6]
+        assert scheds[1].days == [0, 1, 2, 3, 4, 5, 6]
+        assert scheds[2].days == [0, 1, 2, 3, 4, 5, 6]
+

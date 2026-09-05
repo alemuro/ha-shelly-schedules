@@ -9,6 +9,8 @@
 
 A comprehensive Home Assistant custom integration that auto-discovers on-device schedules on your **Shelly devices** (both Gen 1 REST and Gen 2/3/Plus/Pro RPC), allowing you to **view, modify, toggle, delete, and create new schedules** directly from Home Assistant without opening each device's web interface or cloud app.
 
+![Shelly Schedules](shelly-schedules.jpg)
+
 ---
 
 ## ✨ Features
@@ -21,7 +23,8 @@ A comprehensive Home Assistant custom integration that auto-discovers on-device 
 - **Embedded UI (Sidebar Panel & Lovelace Card)**:
   - Responsive visual management dashboard accessible directly from the HA sidebar (`/shelly-schedules`).
   - Can also be added as a custom Lovelace card: `type: custom:shelly-schedules-card`.
-  - Day selector chips, time / sunrise / sunset offset controls, toggle switch, edit modal, and deletion confirmation.
+  - **24-Hour Timeline Forecast**: Visual horizontal timeline bar per device/channel displaying continuous ON/OFF intervals across 24h, midnight rollover, day selector, and live real-time indicator.
+  - Day selector chips, chronological time sorting, time / sunrise / sunset offset controls, toggle switch, edit modal, and deletion confirmation.
 - **Home Assistant Services**:
   - `shelly_schedules.get_schedules`
   - `shelly_schedules.create_schedule`

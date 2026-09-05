@@ -17,6 +17,56 @@ _LOGGER = logging.getLogger(__name__)
 DAY_NAMES_GEN2 = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 DAY_MAP_GEN2_TO_INT = {name: i for i, name in enumerate(DAY_NAMES_GEN2)}
 
+DAY_NAME_MAP = {
+    "SUN": 0, "SU": 0, "0": 0, "7": 0,
+    "MON": 1, "MO": 1, "1": 1,
+    "TUE": 2, "TU": 2, "2": 2,
+    "WED": 3, "WE": 3, "3": 3,
+    "THU": 4, "TH": 4, "4": 4,
+    "FRI": 5, "FR": 5, "5": 5,
+    "SAT": 6, "SA": 6, "6": 6,
+}
+
+
+def parse_cron_dow(dow_str: str) -> list[int]:
+    """Parse cron day-of-week field into a list of day ints (0=Sun..6=Sat)."""
+    if not dow_str or dow_str.strip() in ("*", "?", ""):
+        return [0, 1, 2, 3, 4, 5, 6]
+
+    result: set[int] = set()
+    for part in dow_str.split(","):
+        part = part.strip().upper()
+        if not part:
+            continue
+        if part in ("*", "?"):
+            return [0, 1, 2, 3, 4, 5, 6]
+        if "-" in part:
+            range_parts = part.split("-", 1)
+            start_key = range_parts[0].strip()
+            end_key = range_parts[1].strip()
+            if start_key in DAY_NAME_MAP and end_key in DAY_NAME_MAP:
+                start_val = DAY_NAME_MAP[start_key]
+                end_val = DAY_NAME_MAP[end_key]
+                if start_val <= end_val:
+                    for d in range(start_val, end_val + 1):
+                        result.add(d % 7)
+                else:
+                    d = start_val
+                    while True:
+                        result.add(d % 7)
+                        if d % 7 == end_val % 7:
+                            break
+                        d = (d + 1) % 7
+        elif part in DAY_NAME_MAP:
+            result.add(DAY_NAME_MAP[part])
+        elif part.isdigit():
+            result.add(int(part) % 7)
+
+    if not result:
+        return [0, 1, 2, 3, 4, 5, 6]
+
+    return sorted(list(result))
+
 
 @dataclass
 class ShellySchedule:
@@ -246,23 +296,21 @@ class ShellyDeviceClient:
             days = [0, 1, 2, 3, 4, 5, 6]
 
             if timespec.startswith("@sunrise") or timespec.startswith("@sunset"):
-                time_type = "sunrise" if "sunrise" in timespec else "sunset"
-                time_str = timespec
+                parts = timespec.split()
+                time_type = "sunrise" if "sunrise" in parts[0] else "sunset"
+                time_str = parts[0]
+                if len(parts) >= 2:
+                    days = parse_cron_dow(parts[-1])
             else:
                 parts = timespec.split()
                 if len(parts) >= 6:
                     sec, minute, hour, dom, mon, dow = parts[:6]
                     time_str = f"{int(hour):02d}:{int(minute):02d}"
-                    if dow != "*":
-                        days = []
-                        for item in dow.split(","):
-                            item = item.strip().upper()
-                            if item in DAY_MAP_GEN2_TO_INT:
-                                days.append(DAY_MAP_GEN2_TO_INT[item])
-                            elif item.isdigit():
-                                days.append(int(item))
-                    else:
-                        days = [0, 1, 2, 3, 4, 5, 6]
+                    days = parse_cron_dow(dow)
+                elif len(parts) == 5:
+                    minute, hour, dom, mon, dow = parts[:5]
+                    time_str = f"{int(hour):02d}:{int(minute):02d}"
+                    days = parse_cron_dow(dow)
 
             schedules.append(
                 ShellySchedule(
@@ -300,7 +348,9 @@ class ShellyDeviceClient:
                         continue
                     t_str, days_str, act_str = parts
 
-                    days = [int(d) for d in days_str if d.isdigit()]
+                    days = [int(d) % 7 for d in days_str if d.isdigit()]
+                    if not days or days_str == "*" or days_str.lower() == "all":
+                        days = [0, 1, 2, 3, 4, 5, 6]
                     time_type = "time"
                     if "sunrise" in t_str.lower():
                         time_type = "sunrise"
@@ -358,9 +408,15 @@ class ShellyDeviceClient:
         time_type: str,
         enabled: bool,
     ) -> Any:
-        """Create schedule in Gen 2 RPC."""
+        # Always output explicit day names so Shelly web interface displays all checkboxes correctly
+        if not days or len(days) >= 7:
+            dow = "SUN,MON,TUE,WED,THU,FRI,SAT"
+        else:
+            dow = ",".join(DAY_NAMES_GEN2[d % 7] for d in sorted(set(days)))
+
         if time_type in ("sunrise", "sunset"):
-            timespec = time_str if time_str.startswith("@") else f"@{time_str}"
+            base_tag = time_str if time_str.startswith("@") else f"@{time_str}"
+            timespec = f"{base_tag} * * {dow}"
         else:
             # Parse HH:MM
             hh, mm = (0, 0)
@@ -368,9 +424,6 @@ class ShellyDeviceClient:
                 parts = time_str.split(":")
                 hh = int(parts[0])
                 mm = int(parts[1])
-            dow = "*"
-            if days and len(days) < 7:
-                dow = ",".join(DAY_NAMES_GEN2[d % 7] for d in sorted(days))
             timespec = f"0 {mm} {hh} * * {dow}"
 
         call_action = action.lower() == "on"
@@ -448,17 +501,21 @@ class ShellyDeviceClient:
     ) -> Any:
         """Update an existing schedule."""
         if self.generation == SHELLY_GEN_2:
+            # Always output explicit day names so Shelly web interface displays all checkboxes correctly
+            if not days or len(days) >= 7:
+                dow = "SUN,MON,TUE,WED,THU,FRI,SAT"
+            else:
+                dow = ",".join(DAY_NAMES_GEN2[d % 7] for d in sorted(set(days)))
+
             if time_type in ("sunrise", "sunset"):
-                timespec = time_str if time_str.startswith("@") else f"@{time_str}"
+                base_tag = time_str if time_str.startswith("@") else f"@{time_str}"
+                timespec = f"{base_tag} * * {dow}"
             else:
                 hh, mm = (0, 0)
                 if ":" in time_str:
                     parts = time_str.split(":")
                     hh = int(parts[0])
                     mm = int(parts[1])
-                dow = "*"
-                if days and len(days) < 7:
-                    dow = ",".join(DAY_NAMES_GEN2[d % 7] for d in sorted(days))
                 timespec = f"0 {mm} {hh} * * {dow}"
 
             call_action = action.lower() == "on"
