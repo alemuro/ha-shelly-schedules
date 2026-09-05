@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Gestor de Horarios Shelly",
+        "description": "Configura la detección automática de dispositivos Shelly y la sincronización de sus horarios internos.",
+        "data": {
+          "discover_core_shelly": "Detectar automáticamente dispositivos de la integración oficial de Shelly"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Solo se permite una instancia del Gestor de Horarios Shelly."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Horarios Shelly",
+        "data": {
+          "discover_core_shelly": "Detectar dispositivos de la integración oficial de Shelly"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_schedules": {
+      "name": "Obtener horarios",
+      "description": "Consulta los horarios de los dispositivos Shelly."
+    },
+    "create_schedule": {
+      "name": "Crear horario",
+      "description": "Crea un nuevo horario en un dispositivo Shelly."
+    },
+    "update_schedule": {
+      "name": "Actualizar horario",
+      "description": "Modifica un horario existente en un dispositivo Shelly."
+    },
+    "delete_schedule": {
+      "name": "Eliminar horario",
+      "description": "Elimina un horario de un dispositivo Shelly."
+    },
+    "toggle_schedule": {
+      "name": "Alternar horario",
+      "description": "Activa o desactiva un horario sin eliminarlo."
+    }
+  }
+}

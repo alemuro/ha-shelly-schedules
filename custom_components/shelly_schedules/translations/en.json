@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Shelly Schedules Manager",
+        "description": "Configure automatic detection of Shelly devices and schedule synchronization.",
+        "data": {
+          "discover_core_shelly": "Automatically discover devices from core Shelly integration"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of Shelly Schedules is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Shelly Schedules Options",
+        "data": {
+          "discover_core_shelly": "Discover devices from official Shelly integration"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_schedules": {
+      "name": "Get schedules",
+      "description": "Retrieve schedules from Shelly devices."
+    },
+    "create_schedule": {
+      "name": "Create schedule",
+      "description": "Create a new schedule on a Shelly device."
+    },
+    "update_schedule": {
+      "name": "Update schedule",
+      "description": "Update an existing schedule on a Shelly device."
+    },
+    "delete_schedule": {
+      "name": "Delete schedule",
+      "description": "Delete a schedule from a Shelly device."
+    },
+    "toggle_schedule": {
+      "name": "Toggle schedule",
+      "description": "Enable or disable a schedule without deleting it."
+    }
+  }
+}

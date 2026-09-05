@@ -1,0 +1,41 @@
+[project]
+name = "ha-shelly-schedules"
+version = "1.0.0"
+description = "Home Assistant custom integration to discover, view, edit, delete and create Shelly device schedules (Gen 1 & Gen 2/3/Plus/Pro)."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "alemuro" }
+]
+dependencies = [
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

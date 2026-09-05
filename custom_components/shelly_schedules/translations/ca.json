@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Gestor d'Horaris Shelly",
+        "description": "Configura la detecció automàtica de dispositius Shelly i la sincronització dels seus horaris interns.",
+        "data": {
+          "discover_core_shelly": "Detectar automàticament dispositius de la integració oficial Shelly"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Només es permet una instància de Gestor d'Horaris Shelly."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcions d'Horaris Shelly",
+        "data": {
+          "discover_core_shelly": "Detectar dispositius de la integració oficial Shelly"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_schedules": {
+      "name": "Obtenir horaris",
+      "description": "Consulta els horaris dels dispositius Shelly."
+    },
+    "create_schedule": {
+      "name": "Crear horari",
+      "description": "Crea un nou horari a un dispositiu Shelly."
+    },
+    "update_schedule": {
+      "name": "Actualitzar horari",
+      "description": "Modifica un horari existent en un dispositiu Shelly."
+    },
+    "delete_schedule": {
+      "name": "Eliminar horari",
+      "description": "Elimina un horari d'un dispositiu Shelly."
+    },
+    "toggle_schedule": {
+      "name": "Commutar horari",
+      "description": "Activa o desactiva un horari sense eliminar-lo."
+    }
+  }
+}

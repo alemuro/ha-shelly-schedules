@@ -1,0 +1,191 @@
+get_schedules:
+  name: Get Schedules
+  description: Fetch schedules from a specific Shelly device or all connected devices.
+  fields:
+    device:
+      name: Device
+      description: The IP address, device ID, or friendly name of the Shelly device (leave empty for all).
+      example: "192.168.1.50"
+      selector:
+        text:
+
+create_schedule:
+  name: Create Schedule
+  description: Create a new schedule on a Shelly device.
+  fields:
+    device:
+      name: Device
+      description: The IP address, device ID, or friendly name of the target Shelly device.
+      required: true
+      example: "192.168.1.50"
+      selector:
+        text:
+    time:
+      name: Time or Expression
+      description: Time in HH:MM format (e.g. 07:30), sunrise/sunset with offset (e.g. sunrise+15), or cron expression.
+      required: true
+      example: "07:30"
+      selector:
+        text:
+    action:
+      name: Action
+      description: Action to perform when schedule triggers.
+      required: true
+      default: "on"
+      selector:
+        select:
+          options:
+            - label: Turn On
+              value: "on"
+            - label: Turn Off
+              value: "off"
+    days:
+      name: Days of the week
+      description: Days when the schedule runs (0=Sunday, 1=Monday, ..., 6=Saturday).
+      default: [0, 1, 2, 3, 4, 5, 6]
+      selector:
+        object:
+    channel:
+      name: Relay Channel
+      description: Target relay/switch index on multi-channel devices (0-indexed).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+    time_type:
+      name: Time Type
+      description: Type of schedule timing.
+      default: "time"
+      selector:
+        select:
+          options:
+            - label: Exact Time (HH:MM)
+              value: "time"
+            - label: Sunrise with offset
+              value: "sunrise"
+            - label: Sunset with offset
+              value: "sunset"
+            - label: Cron Expression
+              value: "cron"
+    enabled:
+      name: Enabled
+      description: Whether the schedule is active upon creation.
+      default: true
+      selector:
+        boolean:
+
+update_schedule:
+  name: Update Schedule
+  description: Update an existing schedule on a Shelly device.
+  fields:
+    device:
+      name: Device
+      required: true
+      example: "192.168.1.50"
+      selector:
+        text:
+    schedule_id:
+      name: Schedule ID
+      description: The unique ID of the schedule to update.
+      required: true
+      selector:
+        text:
+    time:
+      name: Time or Expression
+      required: true
+      example: "08:00"
+      selector:
+        text:
+    action:
+      name: Action
+      required: true
+      selector:
+        select:
+          options:
+            - label: Turn On
+              value: "on"
+            - label: Turn Off
+              value: "off"
+    days:
+      name: Days
+      default: [0, 1, 2, 3, 4, 5, 6]
+      selector:
+        object:
+    channel:
+      name: Relay Channel
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+    time_type:
+      name: Time Type
+      default: "time"
+      selector:
+        select:
+          options:
+            - label: Exact Time
+              value: "time"
+            - label: Sunrise
+              value: "sunrise"
+            - label: Sunset
+              value: "sunset"
+            - label: Cron
+              value: "cron"
+    enabled:
+      name: Enabled
+      default: true
+      selector:
+        boolean:
+
+delete_schedule:
+  name: Delete Schedule
+  description: Delete a schedule from a Shelly device.
+  fields:
+    device:
+      name: Device
+      required: true
+      example: "192.168.1.50"
+      selector:
+        text:
+    schedule_id:
+      name: Schedule ID
+      required: true
+      selector:
+        text:
+    channel:
+      name: Channel
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+
+toggle_schedule:
+  name: Toggle Schedule
+  description: Enable or disable a schedule without deleting it.
+  fields:
+    device:
+      name: Device
+      required: true
+      example: "192.168.1.50"
+      selector:
+        text:
+    schedule_id:
+      name: Schedule ID
+      required: true
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      required: true
+      selector:
+        boolean:
+    channel:
+      name: Channel
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
