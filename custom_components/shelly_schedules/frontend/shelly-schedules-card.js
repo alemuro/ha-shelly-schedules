@@ -26,6 +26,43 @@ class ShellySchedulesPanel extends HTMLElement {
     this._editingSchedule = null;
     this._showModal = false;
     this._timer = null;
+    this._collapsedDevices = new Set();
+    try {
+      const saved = localStorage.getItem("shelly_schedules_collapsed");
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) {
+          this._collapsedDevices = new Set(arr);
+        }
+      }
+    } catch (e) {}
+  }
+
+  _toggleDeviceCollapse(devKey) {
+    if (this._collapsedDevices.has(devKey)) {
+      this._collapsedDevices.delete(devKey);
+    } else {
+      this._collapsedDevices.add(devKey);
+    }
+    this._saveCollapsed();
+    this._render();
+  }
+
+  _toggleAllCollapse(devKeys) {
+    const allCollapsed = devKeys.length > 0 && devKeys.every((k) => this._collapsedDevices.has(k));
+    if (allCollapsed) {
+      devKeys.forEach((k) => this._collapsedDevices.delete(k));
+    } else {
+      devKeys.forEach((k) => this._collapsedDevices.add(k));
+    }
+    this._saveCollapsed();
+    this._render();
+  }
+
+  _saveCollapsed() {
+    try {
+      localStorage.setItem("shelly_schedules_collapsed", JSON.stringify(Array.from(this._collapsedDevices)));
+    } catch (e) {}
   }
 
   connectedCallback() {
@@ -500,6 +537,7 @@ class ShellySchedulesPanel extends HTMLElement {
     visibleDevKeys.forEach((k) => {
       totalScheduleCount += (devices[k].schedules || []).length;
     });
+    const allCollapsed = visibleDevKeys.length > 0 && visibleDevKeys.every((k) => this._collapsedDevices.has(k));
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -618,12 +656,20 @@ class ShellySchedulesPanel extends HTMLElement {
         }
 
         /* Device Filters */
+        .filters-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 14px;
+          flex-wrap: wrap;
+        }
         .filters {
           display: flex;
           gap: 8px;
-          margin-bottom: 14px;
           overflow-x: auto;
           padding-bottom: 4px;
+          flex: 1;
         }
         .chip {
           padding: 6px 14px;
@@ -649,6 +695,31 @@ class ShellySchedulesPanel extends HTMLElement {
         }
         .chip.active ha-icon {
           color: #ffffff;
+        }
+        .btn-toggle-all {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider-color, #dcdfe6);
+          background: var(--card-background-color, #ffffff);
+          color: var(--secondary-text-color, #666);
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.2s;
+          user-select: none;
+          font-family: inherit;
+        }
+        .btn-toggle-all:hover {
+          background: var(--table-row-alternative-background-color, #f4f5f7);
+          color: var(--primary-color, #03a9f4);
+          border-color: var(--primary-color, #03a9f4);
+        }
+        .btn-toggle-all ha-icon {
+          --mdc-icon-size: 16px;
         }
 
         /* Day Selector Bar */
@@ -735,6 +806,11 @@ class ShellySchedulesPanel extends HTMLElement {
           display: flex;
           flex-direction: column;
           gap: 18px;
+          transition: all 0.2s ease;
+        }
+        .device-section.collapsed {
+          gap: 0;
+          padding: 16px 20px;
         }
         .device-section-header {
           display: flex;
@@ -745,10 +821,37 @@ class ShellySchedulesPanel extends HTMLElement {
           padding-bottom: 12px;
           border-bottom: 1px solid var(--divider-color, #edf0f2);
         }
+        .device-section.collapsed .device-section-header {
+          padding-bottom: 0;
+          border-bottom: none;
+        }
         .device-header-left {
           display: flex;
           align-items: center;
           gap: 12px;
+          cursor: pointer;
+          user-select: none;
+          border-radius: 8px;
+          padding: 4px 6px;
+          margin: -4px -6px;
+          transition: background-color 0.15s;
+        }
+        .device-header-left:hover {
+          background-color: var(--table-row-alternative-background-color, rgba(0, 0, 0, 0.03));
+        }
+        .device-header-left:hover .device-title-box h3 {
+          color: var(--primary-color, #03a9f4);
+        }
+        .collapse-icon {
+          --mdc-icon-size: 22px;
+          color: var(--secondary-text-color, #757575);
+          transition: transform 0.2s ease, color 0.2s ease;
+        }
+        .device-section.collapsed .collapse-icon {
+          transform: rotate(-90deg);
+        }
+        .device-header-left:hover .collapse-icon {
+          color: var(--primary-color, #03a9f4);
         }
         .device-main-icon {
           --mdc-icon-size: 26px;
@@ -762,6 +865,7 @@ class ShellySchedulesPanel extends HTMLElement {
           font-size: 17px;
           font-weight: 600;
           letter-spacing: -0.2px;
+          transition: color 0.15s;
         }
         .device-subtitle {
           margin-top: 2px;
@@ -1236,21 +1340,35 @@ class ShellySchedulesPanel extends HTMLElement {
         </div>
 
         <!-- Filters by Device -->
-        <div class="filters">
-          <div class="chip ${this._selectedDevice === "all" ? "active" : ""}" data-dev="all">
-            <ha-icon icon="mdi:devices"></ha-icon>
-            <span>Tots (${totalScheduleCount})</span>
-          </div>
-          ${devKeys
-            .map(
-              (k) => `
-            <div class="chip ${this._selectedDevice === k ? "active" : ""}" data-dev="${k}">
-              <ha-icon icon="mdi:developer-board"></ha-icon>
-              <span>${devices[k].name || devices[k].host} (${(devices[k].schedules || []).length})</span>
+        <div class="filters-bar">
+          <div class="filters">
+            <div class="chip ${this._selectedDevice === "all" ? "active" : ""}" data-dev="all">
+              <ha-icon icon="mdi:devices"></ha-icon>
+              <span>Tots (${totalScheduleCount})</span>
             </div>
+            ${devKeys
+              .map(
+                (k) => `
+              <div class="chip ${this._selectedDevice === k ? "active" : ""}" data-dev="${k}">
+                <ha-icon icon="mdi:developer-board"></ha-icon>
+                <span>${devices[k].name || devices[k].host} (${(devices[k].schedules || []).length})</span>
+              </div>
+            `
+              )
+              .join("")}
+          </div>
+          ${
+            visibleDevKeys.length > 1
+              ? `
+            <button class="btn-toggle-all" id="btn-toggle-collapse-all" title="${
+              allCollapsed ? "Desplegar tots els dispositius" : "Plegar tots els dispositius"
+            }">
+              <ha-icon icon="${allCollapsed ? "mdi:unfold-more-horizontal" : "mdi:unfold-less-horizontal"}"></ha-icon>
+              <span>${allCollapsed ? "Desplegar tots" : "Plegar tots"}</span>
+            </button>
           `
-            )
-            .join("")}
+              : ""
+          }
         </div>
 
         <!-- Day of Week Selector -->
@@ -1307,10 +1425,13 @@ class ShellySchedulesPanel extends HTMLElement {
                   const channels = Array.from(new Set(scheds.map((s) => s.channel || 0))).sort((a, b) => a - b);
                   if (channels.length === 0) channels.push(0);
 
+                  const isCollapsed = this._collapsedDevices.has(k);
+
                   return `
-              <div class="device-section">
+              <div class="device-section ${isCollapsed ? "collapsed" : ""}">
                 <div class="device-section-header">
-                  <div class="device-header-left">
+                  <div class="device-header-left" data-dev="${k}" title="${isCollapsed ? "Fes clic per desplegar" : "Fes clic per plegar"}">
+                    <ha-icon icon="mdi:chevron-down" class="collapse-icon"></ha-icon>
                     <ha-icon icon="mdi:developer-board" class="device-main-icon"></ha-icon>
                     <div class="device-title-box">
                       <h3>${d.name || d.host}</h3>
@@ -1324,12 +1445,17 @@ class ShellySchedulesPanel extends HTMLElement {
                       </div>
                     </div>
                   </div>
-                  <button class="btn btn-secondary btn-device-create" data-dev="${k}">
-                    <ha-icon icon="mdi:plus"></ha-icon>
-                    <span>Afegir horari</span>
-                  </button>
+                  <div class="device-header-right">
+                    <button class="btn btn-secondary btn-device-create" data-dev="${k}">
+                      <ha-icon icon="mdi:plus"></ha-icon>
+                      <span>Afegir horari</span>
+                    </button>
+                  </div>
                 </div>
 
+                ${
+                  !isCollapsed
+                    ? `
                 <!-- 24h Timeline Bars per channel -->
                 <div class="device-timelines">
                   ${channels
@@ -1429,6 +1555,9 @@ class ShellySchedulesPanel extends HTMLElement {
                   </div>
                 `
                 }
+              `
+                    : ""
+                }
               </div>
             `;
                 })
@@ -1522,11 +1651,27 @@ class ShellySchedulesPanel extends HTMLElement {
       }
     `;
 
-    this._bindEvents();
+    this._bindEvents(visibleDevKeys);
   }
 
-  _bindEvents() {
+  _bindEvents(visibleDevKeys = []) {
     const root = this.shadowRoot;
+
+    // Toggle all devices collapse button
+    const toggleAllBtn = root.getElementById("btn-toggle-collapse-all");
+    if (toggleAllBtn) {
+      toggleAllBtn.onclick = () => {
+        this._toggleAllCollapse(visibleDevKeys);
+      };
+    }
+
+    // Device collapse toggle
+    root.querySelectorAll(".device-header-left").forEach((header) => {
+      header.onclick = () => {
+        const dev = header.getAttribute("data-dev");
+        if (dev) this._toggleDeviceCollapse(dev);
+      };
+    });
 
     // Refresh button
     const refreshBtn = root.getElementById("btn-refresh");
