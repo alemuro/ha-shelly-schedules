@@ -200,3 +200,36 @@ async def test_gen1_toggle_schedule():
                 "schedule_rules": "0800-0123456-on",
             },
         )
+
+
+@pytest.mark.asyncio
+async def test_shelly_pro_lowercase_method_parsing():
+    """Test parsing real Shelly Pro RPC schedules with lowercase switch.set."""
+    session = MagicMock()
+    client = ShellyDeviceClient(session=session, host="192.168.10.50", name="Shelly Pro 1PM")
+    client.generation = SHELLY_GEN_2
+
+    real_shelly_jobs = {
+        "jobs": [
+            {
+                "id": 1,
+                "enable": True,
+                "timespec": "0 0 16 * * 0,1,2,3,4,5,6",
+                "calls": [{"method": "switch.set", "params": {"on": True, "id": 0}}],
+            },
+            {
+                "id": 2,
+                "enable": True,
+                "timespec": "0 0 19 * * 0,1,2,3,4,5,6",
+                "calls": [{"method": "switch.set", "params": {"on": False, "id": 0}}],
+            },
+        ]
+    }
+
+    with patch.object(client, "_async_rpc_call", new=AsyncMock(return_value=real_shelly_jobs)):
+        schedules = await client.async_get_schedules()
+        assert len(schedules) == 2
+        assert schedules[0].action == "on"
+        assert schedules[0].time_str == "16:00"
+        assert schedules[1].action == "off"
+        assert schedules[1].time_str == "19:00"

@@ -417,6 +417,11 @@ class ShellySchedulesPanel extends HTMLElement {
           color: #c62828;
           border: 1px solid rgba(211, 47, 47, 0.25);
         }
+        .action-toggle {
+          background: rgba(3, 169, 244, 0.12);
+          color: var(--primary-color, #03a9f4);
+          border: 1px solid rgba(3, 169, 244, 0.25);
+        }
         .days-list {
           display: flex;
           gap: 4px;
@@ -667,9 +672,9 @@ class ShellySchedulesPanel extends HTMLElement {
                       ${s.time_type !== 'sunrise' && s.time_type !== 'sunset' ? '<ha-icon icon="mdi:clock-outline"></ha-icon><span>' + s.time_str + '</span>' : ''}
                     </div>
                   </div>
-                  <span class="action-tag ${s.action === 'on' ? 'action-on' : 'action-off'}">
-                    <ha-icon icon="${s.action === 'on' ? 'mdi:power' : 'mdi:power-off'}"></ha-icon>
-                    <span>${s.action === 'on' ? 'ENCÈS' : 'APAGAT'}</span>
+                  <span class="action-tag ${s.action === 'on' ? 'action-on' : s.action === 'toggle' ? 'action-toggle' : 'action-off'}">
+                    <ha-icon icon="${s.action === 'on' ? 'mdi:power' : s.action === 'toggle' ? 'mdi:swap-vertical' : 'mdi:power-off'}"></ha-icon>
+                    <span>${s.action === 'on' ? 'ENCÈS' : s.action === 'toggle' ? 'ALTERNAR' : 'APAGAT'}</span>
                   </span>
                 </div>
 
@@ -906,8 +911,14 @@ class ShellySchedulesPanel extends HTMLElement {
   }
 }
 
-customElements.define("shelly-schedules-panel", ShellySchedulesPanel);
-customElements.define("shelly-schedules-card", ShellySchedulesPanel);
+class ShellySchedulesCard extends ShellySchedulesPanel {}
+
+if (!customElements.get("shelly-schedules-panel")) {
+  customElements.define("shelly-schedules-panel", ShellySchedulesPanel);
+}
+if (!customElements.get("shelly-schedules-card")) {
+  customElements.define("shelly-schedules-card", ShellySchedulesCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({

@@ -215,14 +215,30 @@ class ShellyDeviceClient:
             channel = 0
             action = "toggle"
             for call in calls:
-                method = call.get("method", "")
+                method = call.get("method", "").lower()
                 params = call.get("params", {})
-                if "Switch" in method or "Relay" in method:
+                if any(k in method for k in ("switch", "relay", "light", "output")):
                     channel = params.get("id", 0)
-                    if params.get("on") is True:
+                    on_val = params.get("on")
+                    turn_val = str(params.get("turn", "")).lower()
+                    if (
+                        on_val is True
+                        or on_val == 1
+                        or str(on_val).lower() == "true"
+                        or turn_val == "on"
+                    ):
                         action = "on"
-                    elif params.get("on") is False:
+                    elif (
+                        on_val is False
+                        or on_val == 0
+                        or str(on_val).lower() == "false"
+                        or turn_val == "off"
+                    ):
                         action = "off"
+                    elif "toggle" in method:
+                        action = "toggle"
+                elif "toggle" in method:
+                    action = "toggle"
 
             # Parse timespec
             time_type = "time"
@@ -305,7 +321,11 @@ class ShellyDeviceClient:
                             time_type=time_type,
                             time_str=t_str,
                             days=days,
-                            action=act_str.lower(),
+                            action="on"
+                            if "on" in act_str.lower()
+                            else "off"
+                            if "off" in act_str.lower()
+                            else act_str.lower(),
                             raw=rule,
                         )
                     )
