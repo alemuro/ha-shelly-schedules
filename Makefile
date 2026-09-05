@@ -21,8 +21,18 @@ format: ## Format code with ruff
 
 .PHONY: test
 test: ## Run unit tests
-	uv run pytest -v tests/
+	PYTHONPATH=. uv run pytest -v tests/
 
-.PHONY: validate-hacs
-validate-hacs: ## Validate repository with HACS action locally (using docker)
-	docker run --rm -v $(PWD):/workdir ghcr.io/hacs/action/validate:latest integration
+.PHONY: test-local
+test-local: ## Run Home Assistant container locally for testing
+	docker run -d \
+		--rm \
+		--name homeassistant-test \
+		-v $(shell pwd)/.config:/config \
+		-v $(shell pwd)/custom_components:/config/custom_components \
+		-p 8123:8123 \
+		homeassistant/home-assistant:stable
+
+.PHONY: test-local-stop
+test-local-stop: ## Stop local Home Assistant test container
+	docker stop homeassistant-test
